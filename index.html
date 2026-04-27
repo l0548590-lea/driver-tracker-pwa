@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f3460">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="מעקב נהגים">
+  <meta name="description" content="מעקב GPS לנהגי הסעות">
+  <title>מעקב נהגים</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!--
+    =========================================================
+    BACKGROUND PERSISTENCE — INVISIBLE VIDEO ELEMENT
+    =========================================================
+    Playing an active MediaStream in a <video> element signals
+    to the browser that media playback is ongoing. Most mobile
+    browsers (including iOS Safari) are far less aggressive
+    about suspending pages that have active media sessions.
+
+    This element is 1×1 px, fully transparent, and positioned
+    off-screen. It is populated at runtime by app.js with a
+    canvas-generated stream — no file download required.
+
+    Combined with the Web Wake Lock API and a silent
+    AudioContext, this forms a three-layer keep-alive strategy.
+    =========================================================
+  -->
+  <video
+    id="nosleep-video"
+    loop
+    muted
+    playsinline
+    aria-hidden="true"
+    tabindex="-1"
+    style="
+      position: fixed;
+      width: 1px;
+      height: 1px;
+      top: -2px;
+      left: -2px;
+      opacity: 0.01;
+      pointer-events: none;
+      z-index: -9999;
+    "
+  ></video>
+
+  <div id="app">
+
+    <!-- ===================================================
+         SCREEN: LOADING
+         =================================================== -->
+    <div class="screen active" id="screen-loading">
+      <div class="center-container">
+        <div class="spinner"></div>
+        <p class="loading-text">טוען נתונים...</p>
+      </div>
+    </div>
+
+    <!-- ===================================================
+         SCREEN: SELECT DRIVER
+         =================================================== -->
+    <div class="screen" id="screen-driver">
+      <div class="screen-header">
+        <div class="app-logo">&#128652;</div>
+        <h1>מעקב נהגים</h1>
+        <p class="subtitle">שלב 1 מתוך 3 — בחר שמך</p>
+      </div>
+      <div class="screen-body">
+        <label class="field-label" for="driver-select">שם הנהג</label>
+        <select id="driver-select" class="big-select">
+          <option value="">— בחר נהג —</option>
+        </select>
+
+        <!-- הוספת נהג חדש ידנית -->
+        <div class="add-driver-row">
+          <input
+            type="text"
+            id="driver-manual-input"
+            class="big-input"
+            placeholder="או הכנס שם נהג חדש..."
+            autocomplete="off"
+            autocorrect="off"
+          >
+          <button id="btn-add-driver" class="btn btn-secondary add-btn" disabled>
+            + הוסף
+          </button>
+        </div>
+
+        <div class="spacer"></div>
+        <button id="btn-driver-next" class="btn btn-primary" disabled>
+          הבא &larr;
+        </button>
+      </div>
+    </div>
+
+    <!-- ===================================================
+         SCREEN: SELECT ROUTE
+         =================================================== -->
+    <div class="screen" id="screen-route">
+      <div class="screen-header">
+        <div class="app-logo">&#128205;</div>
+        <h1>בחר מסלול</h1>
+        <p class="subtitle" id="route-driver-label">שלב 2 מתוך 3</p>
+      </div>
+      <div class="screen-body">
+        <label class="field-label" for="route-select">מסלול</label>
+        <select id="route-select" class="big-select">
+          <option value="">— בחר מסלול —</option>
+        </select>
+        <div class="spacer"></div>
+        <button id="btn-route-next" class="btn btn-primary" disabled>
+          הבא &larr;
+        </button>
+        <button id="btn-route-back" class="btn btn-secondary">
+          &rarr; חזור
+        </button>
+      </div>
+    </div>
+
+    <!-- ===================================================
+         SCREEN: STATIONS LIST (READ-ONLY)
+         =================================================== -->
+    <div class="screen" id="screen-stations">
+      <div class="screen-header">
+        <div class="app-logo">&#128204;</div>
+        <h1>תחנות המסלול</h1>
+        <p class="subtitle" id="stations-route-label">שלב 3 מתוך 3</p>
+      </div>
+      <div class="screen-body">
+        <div id="stations-list" class="stations-list"></div>
+        <button id="btn-start-trip" class="btn btn-success">
+          &#9654; התחל נסיעה
+        </button>
+        <button id="btn-stations-back" class="btn btn-secondary">
+          &rarr; חזור
+        </button>
+      </div>
+    </div>
+
+    <!-- ===================================================
+         SCREEN: ACTIVE TRACKING
+         =================================================== -->
+    <div class="screen" id="screen-tracking">
+      <div class="screen-header tracking-header">
+        <div class="live-badge">
+          <span class="live-dot"></span>
+          <span>LIVE</span>
+        </div>
+        <div class="tracking-meta">
+          <span id="track-driver-label" class="meta-item"></span>
+          <span class="meta-sep">|</span>
+          <span id="track-route-label" class="meta-item"></span>
+        </div>
+      </div>
+
+      <div class="screen-body tracking-body">
+
+        <!-- Current / Next station cards -->
+        <div class="station-cards">
+          <div class="station-card current-card">
+            <div class="card-label">&#128205; תחנה נוכחית</div>
+            <div id="current-station" class="card-value">ממתין למיקום...</div>
+          </div>
+          <div class="station-arrow">&#8595;</div>
+          <div class="station-card next-card">
+            <div class="card-label">&#9193; תחנה הבאה</div>
+            <div id="next-station" class="card-value">--</div>
+          </div>
+        </div>
+
+        <!-- Status bar — פנימי בלבד, מוסתר מהנהג -->
+        <span id="gps-status" style="display:none"></span>
+        <span id="next-send-label" style="display:none"></span>
+        <span id="wake-icon" style="display:none"></span>
+        <span id="wake-status" style="display:none"></span>
+
+        <div class="spacer"></div>
+
+        <button id="btn-end-trip" class="btn btn-danger">
+          &#9209; סיים נסיעה
+        </button>
+      </div>
+    </div>
+
+    <!-- ===================================================
+         SCREEN: TRIP ENDED
+         =================================================== -->
+    <div class="screen" id="screen-ended">
+      <div class="center-container">
+        <div class="end-icon">&#10003;</div>
+        <h2>הנסיעה הסתיימה</h2>
+        <p id="end-reason" class="end-reason"></p>
+        <button id="btn-restart" class="btn btn-primary" style="max-width: 340px; margin-top: 2rem;">
+          התחל נסיעה חדשה
+        </button>
+      </div>
+    </div>
+
+    <!-- ===================================================
+         ERROR TOAST
+         =================================================== -->
+    <div id="error-toast" class="error-toast" aria-live="assertive"></div>
+
+  </div><!-- /#app -->
+
+  <script src="app.js"></script>
+</body>
+</html>

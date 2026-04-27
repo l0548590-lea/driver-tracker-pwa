@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="100" fill="#0f3460"/>
+
+  <!-- Bus body -->
+  <rect x="80" y="160" width="352" height="220" rx="30" fill="#2563eb"/>
+
+  <!-- Bus windows (row) -->
+  <rect x="110" y="190" width="60" height="50" rx="8" fill="#bfdbfe"/>
+  <rect x="190" y="190" width="60" height="50" rx="8" fill="#bfdbfe"/>
+  <rect x="270" y="190" width="60" height="50" rx="8" fill="#bfdbfe"/>
+  <rect x="350" y="190" width="62" height="50" rx="8" fill="#bfdbfe"/>
+
+  <!-- Bus front stripe -->
+  <rect x="80" y="255" width="352" height="10" rx="2" fill="#1d4ed8"/>
+
+  <!-- Door -->
+  <rect x="110" y="270" width="70" height="95" rx="8" fill="#1e3a6e"/>
+  <rect x="128" y="288" width="15" height="60" rx="4" fill="#93c5fd"/>
+  <rect x="147" y="288" width="15" height="60" rx="4" fill="#93c5fd"/>
+
+  <!-- Wheels -->
+  <circle cx="160" cy="385" r="40" fill="#1e293b"/>
+  <circle cx="160" cy="385" r="20" fill="#64748b"/>
+  <circle cx="352" cy="385" r="40" fill="#1e293b"/>
+  <circle cx="352" cy="385" r="20" fill="#64748b"/>
+
+  <!-- Undercarriage -->
+  <rect x="80" y="360" width="352" height="25" rx="5" fill="#1d4ed8"/>
+
+  <!-- GPS pin on top -->
+  <circle cx="340" cy="120" r="42" fill="#22c55e"/>
+  <path d="M340 80 C315 80 295 100 295 125 C295 155 340 175 340 175 C340 175 385 155 385 125 C385 100 365 80 340 80Z" fill="#16a34a"/>
+  <circle cx="340" cy="122" r="16" fill="#fff"/>
+</svg>

@@ -207,7 +207,7 @@ const DEMO_DATA = {
 };
 
 function isDemoMode() {
-  return CONFIG.API_URL.includes('YOUR_N8N_INSTANCE');
+  return CONFIG.API_URL.includes('YOUR_N8N_INSTANCE') && CONFIG.WEBHOOK_URL.includes('YOUR_N8N_INSTANCE');
 }
 
 async function loadData() {

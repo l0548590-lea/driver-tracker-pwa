@@ -207,7 +207,11 @@ const DEMO_DATA = {
 };
 
 function isDemoMode() {
-  return CONFIG.API_URL.includes('YOUR_N8N_INSTANCE') && CONFIG.WEBHOOK_URL.includes('YOUR_N8N_INSTANCE');
+  return CONFIG.API_URL.includes('YOUR_N8N_INSTANCE');
+}
+
+function isWebhookConfigured() {
+  return !CONFIG.WEBHOOK_URL.includes('YOUR_N8N_INSTANCE');
 }
 
 async function loadData() {
@@ -477,8 +481,8 @@ function updateStationDisplay() {
 async function sendLocation() {
   if (!state.lastPosition || !state.tracking) return;
 
-  /* במצב הדגמה — לא שולחים לשרת, רק מדפיסים לקונסול */
-  if (isDemoMode()) {
+  /* אם ה-webhook לא מוגדר — לא שולחים לשרת */
+  if (!isWebhookConfigured()) {
     console.log('[DEMO] מיקום (לא נשלח לשרת):', state.lastPosition);
     return;
   }

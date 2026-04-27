@@ -14,7 +14,7 @@
    to make the app installable and available offline.
    ============================================================ */
 
-const CACHE_NAME    = 'driver-tracker-v3';
+const CACHE_NAME    = 'driver-tracker-v4';
 const SHELL_ASSETS  = [
   './',
   './index.html',

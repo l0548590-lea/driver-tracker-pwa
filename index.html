@@ -11,6 +11,7 @@
   <title>מעקב נהגים</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -145,48 +146,47 @@
     </div>
 
     <!-- ===================================================
-         SCREEN: ACTIVE TRACKING
+         SCREEN: ACTIVE TRACKING (MAP)
          =================================================== -->
     <div class="screen" id="screen-tracking">
-      <div class="screen-header tracking-header">
+
+      <!-- המפה תופסת את כל המסך -->
+      <div id="map"></div>
+
+      <!-- כרטיסיות צפות מעל המפה — למעלה -->
+      <div class="map-overlay-top">
         <div class="live-badge">
           <span class="live-dot"></span>
           <span>LIVE</span>
-        </div>
-        <div class="tracking-meta">
-          <span id="track-driver-label" class="meta-item"></span>
           <span class="meta-sep">|</span>
-          <span id="track-route-label" class="meta-item"></span>
+          <span id="track-driver-label" class="meta-item"></span>
+        </div>
+        <div class="station-cards-overlay">
+          <div class="station-card-mini current-card">
+            <div class="card-label">&#128205; נוכחית</div>
+            <div id="current-station" class="card-value-mini">ממתין...</div>
+          </div>
+          <div class="station-arrow-mini">&#8595;</div>
+          <div class="station-card-mini next-card">
+            <div class="card-label">&#9193; הבאה</div>
+            <div id="next-station" class="card-value-mini">--</div>
+          </div>
         </div>
       </div>
 
-      <div class="screen-body tracking-body">
-
-        <!-- Current / Next station cards -->
-        <div class="station-cards">
-          <div class="station-card current-card">
-            <div class="card-label">&#128205; תחנה נוכחית</div>
-            <div id="current-station" class="card-value">ממתין למיקום...</div>
-          </div>
-          <div class="station-arrow">&#8595;</div>
-          <div class="station-card next-card">
-            <div class="card-label">&#9193; תחנה הבאה</div>
-            <div id="next-station" class="card-value">--</div>
-          </div>
-        </div>
-
-        <!-- Status bar — פנימי בלבד, מוסתר מהנהג -->
-        <span id="gps-status" style="display:none"></span>
-        <span id="next-send-label" style="display:none"></span>
-        <span id="wake-icon" style="display:none"></span>
-        <span id="wake-status" style="display:none"></span>
-
-        <div class="spacer"></div>
-
+      <!-- כפתור סיום — צף למטה -->
+      <div class="map-overlay-bottom">
         <button id="btn-end-trip" class="btn btn-danger">
           &#9209; סיים נסיעה
         </button>
       </div>
+
+      <!-- שדות נסתרים לשימוש פנימי בקוד -->
+      <span id="gps-status" style="display:none"></span>
+      <span id="next-send-label" style="display:none"></span>
+      <span id="wake-icon" style="display:none"></span>
+      <span id="wake-status" style="display:none"></span>
+      <span id="track-route-label" style="display:none"></span>
     </div>
 
     <!-- ===================================================
@@ -210,6 +210,7 @@
 
   </div><!-- /#app -->
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

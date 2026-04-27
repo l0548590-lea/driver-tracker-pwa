@@ -66,6 +66,13 @@ const state = {
   watchId: null,
   lastPosition: null,     // { lat, lon, timestamp }
 
+  // Map (Leaflet)
+  map: null,
+  driverMarker: null,
+  nextStationMarker: null,
+  routeLine: null,
+  stationMarkers: [],
+
   // Timers
   sendIntervalId: null,
   countdownId: null,
@@ -333,6 +340,9 @@ async function startTrip() {
 
   showScreen('tracking');
 
+  // --- אתחול המפה (השהייה קצרה כדי שה-DOM יתרנדר לפני Leaflet) ---
+  setTimeout(initMap, 50);
+
   // --- Wake Persistence (must be called inside a user-gesture handler) ---
   await WakePersistence.enable();
 
@@ -392,6 +402,9 @@ function onPositionUpdate(position) {
   };
 
   dom.gpsStatus.textContent = `GPS פעיל \u00B1${Math.round(accuracy)}\u05DE`;
+
+  // עדכון מיקום על המפה
+  updateMapDriver(lat, lon);
 
   // Auto-detect station proximity if coordinates are available
   detectCurrentStation(lat, lon);
@@ -456,6 +469,9 @@ function updateStationDisplay() {
 
   dom.currentStation.textContent = name(current) ?? 'ממתין...';
   dom.nextStation.textContent    = name(next) ?? '\u2705 תחנה סופית';
+
+  // עדכן סמן התחנה הבאה על המפה
+  updateNextStationMarker();
 }
 
 
@@ -521,6 +537,148 @@ async function sendLocation() {
 
 
 /* ============================================================
+   MAP — Leaflet
+   ============================================================ */
+function initMap() {
+  // אם המפה כבר קיימת — הסר אותה קודם
+  if (state.map) {
+    state.map.remove();
+    state.map = null;
+    state.driverMarker = null;
+    state.nextStationMarker = null;
+    state.routeLine = null;
+    state.stationMarkers = [];
+  }
+
+  // מרכז ברירת מחדל — ישראל
+  const defaultCenter = [31.5, 34.85];
+  const defaultZoom  = 9;
+
+  state.map = L.map('map', {
+    center: defaultCenter,
+    zoom: defaultZoom,
+    zoomControl: true,
+    attributionControl: false,
+  });
+
+  // שכבת מפה — OpenStreetMap בחינם
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+  }).addTo(state.map);
+
+  // ציור כל התחנות על המפה
+  drawStationsOnMap();
+}
+
+function drawStationsOnMap() {
+  if (!state.map) return;
+  const stations = state.stations;
+  if (!stations.length) return;
+
+  // סמן לכל תחנה שיש לה קואורדינטות
+  const latlngs = [];
+  stations.forEach((st, i) => {
+    if (st.lat == null || st.lon == null) return;
+    latlngs.push([st.lat, st.lon]);
+
+    // נקודה קטנה לכל תחנה
+    const dot = L.circleMarker([st.lat, st.lon], {
+      radius: 7,
+      fillColor: '#2563eb',
+      color: '#fff',
+      weight: 2,
+      fillOpacity: 0.9,
+    }).addTo(state.map);
+
+    dot.bindTooltip(st.name || `תחנה ${i + 1}`, {
+      permanent: false,
+      direction: 'top',
+    });
+
+    state.stationMarkers.push(dot);
+  });
+
+  // קו המסלול
+  if (latlngs.length > 1) {
+    state.routeLine = L.polyline(latlngs, {
+      color: '#3b82f6',
+      weight: 4,
+      opacity: 0.7,
+      dashArray: '8, 6',
+    }).addTo(state.map);
+
+    // מרכז המפה על המסלול
+    state.map.fitBounds(state.routeLine.getBounds(), { padding: [50, 50] });
+  }
+}
+
+function updateMapDriver(lat, lon) {
+  if (!state.map) return;
+
+  // אייקון כחול לנהג
+  const driverIcon = L.divIcon({
+    className: '',
+    html: `<div style="
+      width:22px;height:22px;
+      background:#2563eb;
+      border:3px solid #fff;
+      border-radius:50%;
+      box-shadow:0 2px 8px rgba(0,0,0,0.4);
+    "></div>`,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+  });
+
+  if (!state.driverMarker) {
+    state.driverMarker = L.marker([lat, lon], { icon: driverIcon, zIndexOffset: 1000 })
+      .addTo(state.map)
+      .bindTooltip('הנהג', { permanent: false, direction: 'top' });
+    // עקוב אחרי הנהג בפעם הראשונה
+    state.map.setView([lat, lon], 15);
+  } else {
+    state.driverMarker.setLatLng([lat, lon]);
+    // מרכז את המפה על הנהג בעדינות
+    state.map.panTo([lat, lon], { animate: true, duration: 1 });
+  }
+
+  // עדכן סמן התחנה הבאה
+  updateNextStationMarker();
+}
+
+function updateNextStationMarker() {
+  if (!state.map) return;
+  const next = state.stations[state.currentStationIdx + 1];
+
+  // הסר סמן קודם
+  if (state.nextStationMarker) {
+    state.map.removeLayer(state.nextStationMarker);
+    state.nextStationMarker = null;
+  }
+
+  if (!next || next.lat == null || next.lon == null) return;
+
+  // אייקון ירוק לתחנה הבאה
+  const nextIcon = L.divIcon({
+    className: '',
+    html: `<div style="
+      width:28px;height:28px;
+      background:#16a34a;
+      border:3px solid #fff;
+      border-radius:50%;
+      box-shadow:0 2px 10px rgba(0,0,0,0.5);
+      display:flex;align-items:center;justify-content:center;
+      font-size:14px;color:#fff;font-weight:bold;
+    ">&#9193;</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  });
+
+  state.nextStationMarker = L.marker([next.lat, next.lon], { icon: nextIcon, zIndexOffset: 900 })
+    .addTo(state.map)
+    .bindTooltip(`הבאה: ${next.name || ''}`, { permanent: true, direction: 'top', offset: [0, -10] });
+}
+
+/* ============================================================
    END TRIP
    ============================================================ */
 /**
@@ -549,6 +707,16 @@ function endTrip(reason = 'הנסיעה הסתיימה') {
 
   // Release wake persistence
   WakePersistence.disable();
+
+  // ניקוי המפה
+  if (state.map) {
+    state.map.remove();
+    state.map = null;
+    state.driverMarker = null;
+    state.nextStationMarker = null;
+    state.routeLine = null;
+    state.stationMarkers = [];
+  }
 
   dom.endReason.textContent = reason;
   showScreen('ended');

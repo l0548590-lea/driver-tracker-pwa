@@ -369,26 +369,62 @@ html, body {
 }
 
 /* ============================================================
-   TRACKING HEADER
+   MAP — תופס את כל מסך הנסיעה
    ============================================================ */
-.tracking-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.9rem 1.4rem;
+#screen-tracking {
+  overflow: hidden;
 }
 
+#map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  background: #e8e0d8;
+}
+
+/* ============================================================
+   MAP OVERLAYS — צפות מעל המפה
+   ============================================================ */
+.map-overlay-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  pointer-events: none;
+}
+
+.map-overlay-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 1rem;
+  pointer-events: all;
+}
+
+/* Live badge */
 .live-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  background: #dc262622;
+  background: rgba(13, 17, 23, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid #dc262655;
   border-radius: 99px;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.85rem;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: #f87171;
+  pointer-events: all;
   width: fit-content;
 }
 
@@ -398,6 +434,7 @@ html, body {
   background: #f87171;
   border-radius: 50%;
   animation: pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
 }
 
 @keyframes pulse {
@@ -405,108 +442,58 @@ html, body {
   50%       { opacity: 0.5; transform: scale(0.75); }
 }
 
-.tracking-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 1rem;
-  flex-wrap: wrap;
-}
-
 .meta-item {
   font-weight: 600;
-  color: var(--text);
+  color: #e6edf3;
 }
 
 .meta-sep {
-  color: var(--text-dim);
+  color: #6e7681;
 }
 
-/* ============================================================
-   TRACKING BODY
-   ============================================================ */
-.tracking-body {
-  gap: 1rem;
-}
-
-/* ============================================================
-   STATION CARDS
-   ============================================================ */
-.station-cards {
+/* כרטיסיות תחנה מעל המפה */
+.station-cards-overlay {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.3rem;
+  pointer-events: all;
 }
 
-.station-card {
-  background: var(--surface2);
+.station-card-mini {
+  background: rgba(13, 17, 23, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-radius: var(--radius);
-  padding: 1.1rem 1.3rem;
-  border-right: 5px solid var(--border);
+  padding: 0.7rem 1rem;
+  border-right: 4px solid var(--border);
 }
 
-.current-card {
-  border-right-color: var(--current-c);
-}
-
-.next-card {
-  border-right-color: var(--next-c);
-}
+.station-card-mini.current-card { border-right-color: var(--current-c); }
+.station-card-mini.next-card    { border-right-color: var(--next-c); }
 
 .card-label {
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.2rem;
 }
 
-.card-value {
-  font-size: 1.55rem;
+.card-value-mini {
+  font-size: 1.2rem;
   font-weight: 800;
-  letter-spacing: -0.01em;
   line-height: 1.2;
 }
 
-.current-card .card-value {
-  color: #60a5fa;
-}
+.station-card-mini.current-card .card-value-mini { color: #60a5fa; }
+.station-card-mini.next-card    .card-value-mini { color: #4ade80; }
 
-.next-card .card-value {
-  color: #4ade80;
-}
-
-.station-arrow {
+.station-arrow-mini {
   text-align: center;
-  font-size: 1.3rem;
-  color: var(--text-dim);
-  padding: 0.1rem 0;
-}
-
-/* ============================================================
-   STATUS BAR
-   ============================================================ */
-.status-bar {
-  background: var(--surface2);
-  border-radius: var(--radius);
-  padding: 0.85rem 1.1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.status-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.95rem;
-  color: var(--text-muted);
-}
-
-.status-icon {
   font-size: 1rem;
-  flex-shrink: 0;
+  color: var(--text-dim);
+  padding: 0.05rem 0;
 }
 
 /* ============================================================

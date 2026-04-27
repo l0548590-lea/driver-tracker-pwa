@@ -26,7 +26,7 @@ const CONFIG = {
    * The response may optionally contain { "terminate": true }
    * to instruct the app to end the trip automatically.
    */
-  WEBHOOK_URL: 'https://YOUR_N8N_INSTANCE/webhook/track',
+  WEBHOOK_URL: 'https://n8n.srv1249349.hstgr.cloud/webhook-test/1407e6ea-d0a6-424b-b739-db4b795df8a8',
 
   /** Sent as the x-api-key header on every request */
   API_KEY: 'YOUR_SECRET_API_KEY',

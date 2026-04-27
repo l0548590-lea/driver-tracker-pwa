@@ -120,10 +120,6 @@ const dom = {
   btnStartTrip:    $('btn-start-trip'),
   btnStationsBack: $('btn-stations-back'),
 
-  // Driver manual add
-  driverManualInput: $('driver-manual-input'),
-  btnAddDriver:      $('btn-add-driver'),
-
   // Tracking screen
   trackDriverLabel: $('track-driver-label'),
   trackRouteLabel:  $('track-route-label'),
@@ -896,49 +892,7 @@ function bindEvents() {
   // בחירה מהרשימה הקיימת
   dom.driverSelect.addEventListener('change', (e) => {
     state.driver = e.target.value || null;
-    dom.driverManualInput.value = ''; // נקה את שדה ההקלדה
     dom.btnDriverNext.disabled = !state.driver;
-  });
-
-  // הקלדת נהג חדש — מפעיל/מכבה את כפתור "הוסף"
-  dom.driverManualInput.addEventListener('input', (e) => {
-    const val = e.target.value.trim();
-    dom.btnAddDriver.disabled = val.length === 0;
-    // אם מקלידים — מנקים את הבחירה מהרשימה
-    if (val) {
-      dom.driverSelect.value = '';
-      state.driver = null;
-      dom.btnDriverNext.disabled = true;
-    }
-  });
-
-  // לחיצה על "הוסף" — מוסיף את הנהג לרשימה ובוחר אותו
-  dom.btnAddDriver.addEventListener('click', () => {
-    const name = dom.driverManualInput.value.trim();
-    if (!name) return;
-
-    // הוסף לרשימה המקומית אם לא קיים
-    if (!state.drivers.includes(name)) {
-      state.drivers.unshift(name); // הוסף בתחילת הרשימה
-      const opt = document.createElement('option');
-      opt.value = name;
-      opt.textContent = name;
-      dom.driverSelect.insertBefore(opt, dom.driverSelect.options[1]);
-    }
-
-    // בחר אותו אוטומטית
-    dom.driverSelect.value = name;
-    state.driver = name;
-    dom.driverManualInput.value = '';
-    dom.btnAddDriver.disabled = true;
-    dom.btnDriverNext.disabled = false;
-  });
-
-  // Enter בשדה ההקלדה = לחיצה על הוסף
-  dom.driverManualInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !dom.btnAddDriver.disabled) {
-      dom.btnAddDriver.click();
-    }
   });
 
   dom.btnDriverNext.addEventListener('click', () => {

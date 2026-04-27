@@ -1,0 +1,216 @@
+{
+  "name": "02 - Driver Tracker | קבלת מיקומים בזמן אמת",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "track",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000001",
+      "name": "Webhook POST /track",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "track-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// בדיקת מפתח API + חילוץ נתוני המיקום\n// ============================================================\nconst apiKey = $input.first().json.headers['x-api-key'];\nconst SECRET_KEY = 'YOUR_SECRET_API_KEY'; // <-- אותו מפתח כמו ב-workflow הראשון\n\nif (apiKey !== SECRET_KEY) {\n  return [{\n    json: {\n      __authorized: false,\n      error: 'Unauthorized'\n    }\n  }];\n}\n\nconst body = $input.first().json.body;\n\n// נתוני המיקום שנשלחים מהאפליקציה\nconst locationData = {\n  timestamp:    body.timestamp   ?? new Date().toISOString(),\n  driver:       body.driver      ?? 'לא ידוע',\n  route:        body.route       ?? 'לא ידוע',\n  lat:          body.lat         ?? null,\n  lon:          body.lon         ?? null,\n  station:      body.station     ?? null,\n  stationIndex: body.stationIndex ?? -1,\n\n  // שדות נוספים לנוחות הגיליון\n  date: new Date(body.timestamp ?? Date.now()).toLocaleDateString('he-IL'),\n  time: new Date(body.timestamp ?? Date.now()).toLocaleTimeString('he-IL'),\n  googleMapsLink: (body.lat && body.lon)\n    ? `https://maps.google.com/?q=${body.lat},${body.lon}`\n    : ''\n};\n\nreturn [{ json: { __authorized: true, ...locationData } }];"
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000002",
+      "name": "בדוק מפתח ועבד מיקום",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "auth-check",
+              "leftValue": "={{ $json.__authorized }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000003",
+      "name": "מפתח תקין?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"error\":\"Unauthorized\"}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000004",
+      "name": "דחה — מפתח שגוי",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// לוגיקת סיום נסיעה אוטומטי\n// ============================================================\n// האפליקציה שולחת stationIndex = מספר התחנה הנוכחית (מ-0)\n// אם הגיע לתחנה האחרונה — שלח פקודת terminate\n//\n// עדכן את TOTAL_STATIONS לפי מסלול אם צריך\n// או בדוק לפי שם התחנה\n\nconst data = $input.first().json;\n\n// -------------------------------------------------------\n// אפשרות א: סיום לפי מספר תחנה\n// הגדר כאן כמה תחנות יש בכל מסלול\n// -------------------------------------------------------\nconst stationsPerRoute = {\n  'מסלול צפון — בוקר':   5,\n  'מסלול דרום — צהריים': 4,\n  'מסלול מזרח — ערב':    4,\n};\n\nconst totalStations = stationsPerRoute[data.route] ?? 999;\nconst isLastStation = data.stationIndex >= totalStations - 1;\n\n// -------------------------------------------------------\n// אפשרות ב: סיום לפי שם תחנה (בטל הערה אם מעדיף)\n// -------------------------------------------------------\n// const isLastStation = data.station === 'קצה המסלול';\n\nreturn [{\n  json: {\n    ...data,\n    terminate: isLastStation,\n    reason: isLastStation ? 'הגעת לתחנה הסופית' : null\n  }\n}];"
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000005",
+      "name": "בדוק האם תחנה אחרונה",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 220]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "תאריך":      "={{ $json.date }}",
+            "שעה":        "={{ $json.time }}",
+            "נהג":        "={{ $json.driver }}",
+            "מסלול":      "={{ $json.route }}",
+            "תחנה":       "={{ $json.station }}",
+            "קו רוחב":    "={{ $json.lat }}",
+            "קו אורך":    "={{ $json.lon }}",
+            "קישור מפה":  "={{ $json.googleMapsLink }}",
+            "Timestamp":  "={{ $json.timestamp }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000006",
+      "name": "שמור לגוגל שיטס",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1120, 220],
+      "notes": "חבר credentials של Google Sheets לפני הפעלה"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, terminate: $('בדוק האם תחנה אחרונה').first().json.terminate, reason: $('בדוק האם תחנה אחרונה').first().json.reason }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000007",
+      "name": "החזר תגובה לאפליקציה",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 220]
+    }
+  ],
+  "connections": {
+    "Webhook POST /track": {
+      "main": [
+        [
+          {
+            "node": "בדוק מפתח ועבד מיקום",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "בדוק מפתח ועבד מיקום": {
+      "main": [
+        [
+          {
+            "node": "מפתח תקין?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "מפתח תקין?": {
+      "main": [
+        [
+          {
+            "node": "בדוק האם תחנה אחרונה",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "דחה — מפתח שגוי",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "בדוק האם תחנה אחרונה": {
+      "main": [
+        [
+          {
+            "node": "שמור לגוגל שיטס",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "שמור לגוגל שיטס": {
+      "main": [
+        [
+          {
+            "node": "החזר תגובה לאפליקציה",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "driver-tracker"
+  }
+}

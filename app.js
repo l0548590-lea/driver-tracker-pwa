@@ -1,33 +1,28 @@
 'use strict';
 
 /* ============================================================
-   CONFIGURATION — edit these values before deployment
+   CONFIGURATION
+   Keys come from config.js (gitignored).  Fallbacks here are
+   used only in demo / local dev without a config.js file.
    ============================================================ */
-const CONFIG = {
-  /** Supabase project URL */
-  SUPABASE_URL: 'https://djklzeiwasevjatfasnl.supabase.co',
+const CONFIG = Object.assign(
+  {
+    SUPABASE_URL:   'https://djklzeiwasevjatfasnl.supabase.co',
+    SUPABASE_KEY:   'sb_publishable_NPMNAXMEzN_61lpHI0MyhQ_90Dz0D49',
+    WEBHOOK_URL:    '',
+    API_KEY:        '',
 
-  /** Supabase publishable (anon) key */
-  SUPABASE_KEY: 'sb_publishable_NPMNAXMEzN_61lpHI0MyhQ_90Dz0D49',
+    /** How often to insert a row into location_logs (ms) */
+    SEND_INTERVAL:  30_000,
 
-  /**
-   * n8n webhook — נשלח רק כשנהג מגיע לתחנה (לצורך הכרזה בימות המשיח).
-   * לא נדרש לפינגים רגילים — אלה הולכים ישירות ל-Supabase.
-   */
-  WEBHOOK_URL: 'https://n8n.srv1249349.hstgr.cloud/webhook-test/1407e6ea-d0a6-424b-b739-db4b795df8a8',
+    /** Radius in metres within which a driver is "at" a station */
+    STATION_RADIUS: 150,
 
-  /** Sent as the x-api-key header to n8n */
-  API_KEY: 'YOUR_SECRET_API_KEY',
-
-  /** How often to update location in Supabase (ms) */
-  SEND_INTERVAL: 30_000,
-
-  /** Radius in meters within which a driver is considered "at" a station */
-  STATION_RADIUS: 150,
-
-  /** Safety auto-shutdown after this many ms without a new station */
-  SAFETY_TIMEOUT: 45 * 60 * 1000,
-};
+    /** Auto-shutdown after this many ms with no GPS movement */
+    SAFETY_TIMEOUT: 30 * 60 * 1000,
+  },
+  window.APP_CONFIG || {},
+);
 
 
 /* ============================================================
@@ -49,6 +44,8 @@ const state = {
   // Station tracking
   currentStationIdx: -1,  // index of the last station passed; -1 = none yet
   lastStationTime: null,  // Date.now() when the last station was detected
+  lastMovementTime: null, // Date.now() on every GPS position update
+  skippedStations: new Set(), // indices of stations muted for this trip
 
   // GPS
   watchId: null,
@@ -211,9 +208,6 @@ function isDemoMode() {
   return !CONFIG.SUPABASE_URL || CONFIG.SUPABASE_URL.includes('YOUR_SUPABASE');
 }
 
-function isWebhookConfigured() {
-  return CONFIG.WEBHOOK_URL && !CONFIG.WEBHOOK_URL.includes('YOUR_N8N_INSTANCE');
-}
 
 async function loadData() {
   showScreen('loading');
@@ -327,6 +321,7 @@ function populateRouteSelect() {
 function renderStationsList() {
   const stations = state.routes[state.route] || [];
   state.stations = stations;
+  state.skippedStations.clear();
 
   dom.stationsRouteLabel.textContent = `מסלול: ${state.route}`;
   dom.stationsList.innerHTML = '';
@@ -341,9 +336,11 @@ function renderStationsList() {
     const name = typeof st === 'string' ? st : (st.name || `תחנה ${i + 1}`);
     const item = document.createElement('div');
     item.className = 'station-item';
+    item.dataset.index = i;
     item.innerHTML = `
       <div class="station-num">${i + 1}</div>
       <div class="station-item-name">${name}</div>
+      <button class="btn-skip-station" data-index="${i}" title="דלג על תחנה זו">דלג</button>
     `;
     dom.stationsList.appendChild(item);
   });
@@ -357,6 +354,7 @@ async function startTrip() {
   state.tracking = true;
   state.currentStationIdx = -1;
   state.lastStationTime = Date.now();
+  state.lastMovementTime = Date.now();
   state.lastPosition = null;
   state.sendCountdown = CONFIG.SEND_INTERVAL / 1000;
 
@@ -434,9 +432,9 @@ async function startTrip() {
   // --- Safety timeout check (runs every minute) ---
   state.safetyCheckId = setInterval(() => {
     if (!state.tracking) return;
-    const elapsed = Date.now() - state.lastStationTime;
+    const elapsed = Date.now() - state.lastMovementTime;
     if (elapsed > CONFIG.SAFETY_TIMEOUT) {
-      endTrip('פסק הזמן פג — לא זוהתה תחנה חדשה במשך 45 דקות');
+      endTrip('סיום אוטומטי — לא זוהה תנועה במשך 30 דקות');
     }
   }, 60_000);
 }
@@ -453,6 +451,7 @@ function onPositionUpdate(position) {
     lon,
     timestamp: new Date().toISOString(),
   };
+  state.lastMovementTime = Date.now();
 
   dom.gpsStatus.textContent = `GPS פעיל \u00B1${Math.round(accuracy)}\u05DE`;
 
@@ -491,6 +490,7 @@ function detectCurrentStation(lat, lon) {
   if (!stations.length) return;
 
   for (let i = currentStationIdx + 1; i < stations.length; i++) {
+    if (state.skippedStations.has(i)) continue;
     const st = stations[i];
     if (st == null || st.lat == null || st.lon == null) continue;
 
@@ -543,7 +543,8 @@ function updateStationDisplay() {
 
 
 /* ============================================================
-   SEND LOCATION — עדכון מיקום ב-Supabase
+   SEND LOCATION — INSERT row into location_logs (single pipeline)
+   Supabase Database Webhook fires on every INSERT and notifies n8n.
    ============================================================ */
 async function sendLocation() {
   if (!state.lastPosition || !state.tracking) return;
@@ -553,21 +554,18 @@ async function sendLocation() {
     return;
   }
 
-  if (!state.tripId) return;
-
   const { lat, lon, timestamp } = state.lastPosition;
 
-  const { error } = await db
-    .from('trips')
-    .update({
-      last_lat:              lat,
-      last_lon:              lon,
-      current_station_index: state.currentStationIdx,
-      last_update:           timestamp,
-    })
-    .eq('id', state.tripId);
+  const { error } = await db.from('location_logs').insert({
+    driver_id: state.driverMap?.[state.driver] || null,
+    route_id:  state.routeMap?.[state.route]   || null,
+    lat,
+    lng:       lon,
+    timestamp,
+    status:    'active',
+  });
 
-  if (error) console.warn('[Supabase] Update failed:', error.message);
+  if (error) console.warn('[Supabase] location_logs insert failed:', error.message);
 }
 
 
@@ -593,37 +591,14 @@ async function logEvent(eventType, extra = {}) {
 
 
 /* ============================================================
-   STATION ARRIVAL — כתיבה ל-events_log + שליחה ל-n8n
+   STATION ARRIVAL — כתיבה ל-events_log
+   n8n מקבל את האירוע דרך Supabase Database Webhook על location_logs.
    ============================================================ */
 async function notifyStationArrival(stationIdx, station) {
-  // כתיבה ל-Supabase
   await logEvent('station_arrival', {
     station_name:      station.name,
     announcement_text: station.name,
   });
-
-  // שליחה ל-n8n (להכרזה בימות המשיח)
-  if (!isWebhookConfigured()) return;
-  try {
-    await fetch(CONFIG.WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': CONFIG.API_KEY },
-      body: JSON.stringify({
-        event:        'station_arrival',
-        driver:       state.driver,
-        route:        state.route,
-        trip_id:      state.tripId,
-        stationIndex: stationIdx,
-        stationName:  station.name,
-        stationType:  station.סוג || 'צומת',
-        lat:          state.lastPosition?.lat,
-        lon:          state.lastPosition?.lon,
-        timestamp:    new Date().toISOString(),
-      }),
-    });
-  } catch (err) {
-    console.warn('[Webhook] Station notify failed:', err.message);
-  }
 }
 
 
@@ -1047,6 +1022,23 @@ function bindEvents() {
   // STATIONS screen
   dom.btnStationsBack.addEventListener('click', () => showScreen('route'));
 
+  // Station skip toggle — event delegation on the list container
+  dom.stationsList.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-skip-station');
+    if (!btn) return;
+    const idx = parseInt(btn.dataset.index, 10);
+    const item = dom.stationsList.querySelector(`.station-item[data-index="${idx}"]`);
+    if (state.skippedStations.has(idx)) {
+      state.skippedStations.delete(idx);
+      item?.classList.remove('skipped');
+      btn.textContent = 'דלג';
+    } else {
+      state.skippedStations.add(idx);
+      item?.classList.add('skipped');
+      btn.textContent = 'בטל דילוג';
+    }
+  });
+
   dom.btnStartTrip.addEventListener('click', startTrip);
 
   // TRACKING screen
@@ -1070,6 +1062,7 @@ function resetForNewTrip() {
   state.tripId               = null;
   state.finalStationReached  = false;
   state.autoEndTimerId       = null;
+  state.skippedStations.clear();
   dom.driverUsername.value   = '';
   dom.driverPassword.value   = '';
   dom.routeSelect.value      = '';

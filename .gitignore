@@ -1,2 +1,2 @@
-# Local config with real API keys — never commit this
-config.js
+# Supabase anon key is public by design (publishable key).
+# config.js is committed intentionally.

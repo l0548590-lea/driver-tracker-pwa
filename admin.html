@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ניהול מערכת — מעקב נהגים</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+  <!-- ===== מסך כניסה ===== -->
+  <div id="login-screen">
+    <div class="login-box">
+      <div class="login-logo">⚙️</div>
+      <h1>ניהול מערכת</h1>
+      <input type="password" id="password-input" placeholder="סיסמה" autocomplete="current-password">
+      <button id="btn-login">כניסה</button>
+      <p id="login-error" class="error-msg"></p>
+    </div>
+  </div>
+
+  <!-- ===== ממשק ניהול ===== -->
+  <div id="admin-screen" class="hidden">
+
+    <header class="admin-header">
+      <h1>⚙️ ניהול מערכת</h1>
+      <button id="btn-logout" class="btn-logout">יציאה</button>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="drivers">נהגים</button>
+      <button class="tab" data-tab="routes">מסלולים ותחנות</button>
+      <button class="tab" data-tab="history">היסטוריה</button>
+    </nav>
+
+    <!-- ===== טאב נהגים ===== -->
+    <div id="tab-drivers" class="tab-content active">
+      <div class="section-header">
+        <h2>נהגים</h2>
+        <button class="btn-add" id="btn-add-driver">+ הוסף נהג</button>
+      </div>
+
+      <div id="add-driver-form" class="form-box hidden">
+        <input type="text" id="new-driver-name" placeholder="שם הנהג" autocomplete="off">
+        <button id="btn-save-driver" class="btn-primary">שמור</button>
+        <button id="btn-cancel-driver" class="btn-secondary">ביטול</button>
+      </div>
+
+      <table class="data-table" id="drivers-table">
+        <thead><tr><th>שם</th><th>פעיל</th><th></th></tr></thead>
+        <tbody id="drivers-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- ===== טאב מסלולים ===== -->
+    <div id="tab-routes" class="tab-content hidden">
+      <div class="routes-layout">
+
+        <!-- עמודה שמאל: מסלולים -->
+        <div class="routes-panel">
+          <div class="section-header">
+            <h2>מסלולים</h2>
+            <button class="btn-add" id="btn-add-route">+ הוסף</button>
+          </div>
+
+          <div id="add-route-form" class="form-box hidden">
+            <input type="text" id="new-route-name" placeholder="שם מסלול" autocomplete="off">
+            <button id="btn-save-route" class="btn-primary">שמור</button>
+            <button id="btn-cancel-route" class="btn-secondary">ביטול</button>
+          </div>
+
+          <ul id="routes-list" class="routes-list"></ul>
+        </div>
+
+        <!-- עמודה ימין: תחנות -->
+        <div class="stations-panel">
+          <div class="section-header">
+            <h2 id="stations-title">בחר מסלול</h2>
+            <button class="btn-add hidden" id="btn-add-station">+ הוסף תחנה</button>
+          </div>
+          <table class="data-table" id="stations-table">
+            <thead><tr><th>#</th><th>שם תחנה</th><th>סוג</th><th>lat</th><th>lon</th><th></th></tr></thead>
+            <tbody id="stations-tbody"></tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ===== טאב היסטוריה ===== -->
+    <div id="tab-history" class="tab-content hidden">
+      <h2>נסיעות אחרונות</h2>
+      <table class="data-table">
+        <thead><tr><th>נהג</th><th>מסלול</th><th>התחלה</th><th>עדכון אחרון</th><th>סטטוס</th></tr></thead>
+        <tbody id="history-tbody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ===== מודל תחנה ===== -->
+  <div id="station-modal" class="modal hidden">
+    <div class="modal-box">
+      <h3 id="modal-title">הוסף תחנה</h3>
+      <input type="text"   id="st-name"  placeholder="שם תחנה" autocomplete="off">
+      <select id="st-type">
+        <option value="צומת">צומת</option>
+        <option value="כניסה_עיר">כניסה לעיר</option>
+      </select>
+      <div class="coord-row">
+        <input type="number" id="st-lat" placeholder="lat" step="0.0001">
+        <input type="number" id="st-lon" placeholder="lon" step="0.0001">
+      </div>
+      <p class="map-hint">לחץ על המפה לבחירת מיקום</p>
+      <div id="station-map"></div>
+      <div class="modal-actions">
+        <button id="btn-save-station" class="btn-primary">שמור</button>
+        <button id="btn-cancel-station" class="btn-secondary">ביטול</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

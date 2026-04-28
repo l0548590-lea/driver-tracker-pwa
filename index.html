@@ -71,17 +71,17 @@
       <div class="screen-header">
         <div class="app-logo">&#128652;</div>
         <h1>מעקב נהגים</h1>
-        <p class="subtitle">שלב 1 מתוך 3 — בחר שמך</p>
+        <p class="subtitle">כניסת נהג</p>
       </div>
       <div class="screen-body">
-        <label class="field-label" for="driver-select">שם הנהג</label>
-        <select id="driver-select" class="big-select">
-          <option value="">— בחר נהג —</option>
-        </select>
-
+        <label class="field-label" for="driver-username">שם משתמש</label>
+        <input type="text" id="driver-username" class="big-select" placeholder="הכנס שם משתמש" autocomplete="username">
+        <label class="field-label" for="driver-password" style="margin-top:1rem">סיסמה</label>
+        <input type="password" id="driver-password" class="big-select" placeholder="הכנס סיסמה" autocomplete="current-password">
+        <p id="driver-login-error" style="color:#ef4444;min-height:1.2rem;margin-top:.5rem;text-align:center"></p>
         <div class="spacer"></div>
         <button id="btn-driver-next" class="btn btn-primary" disabled>
-          הבא &larr;
+          כניסה &larr;
         </button>
       </div>
     </div>

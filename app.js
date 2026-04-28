@@ -97,8 +97,10 @@ const dom = {
   screenEnded:     $('screen-ended'),
 
   // Driver screen
-  driverSelect:    $('driver-select'),
-  btnDriverNext:   $('btn-driver-next'),
+  driverUsername:   $('driver-username'),
+  driverPassword:   $('driver-password'),
+  driverLoginError: $('driver-login-error'),
+  btnDriverNext:    $('btn-driver-next'),
 
   // Route screen
   routeDriverLabel: $('route-driver-label'),
@@ -278,14 +280,29 @@ async function loadData() {
    STEP 1 — DRIVER SELECTION
    ============================================================ */
 function populateDriverSelect() {
-  dom.driverSelect.innerHTML = '<option value="">— בחר נהג —</option>';
-  state.drivers.forEach((name) => {
-    const opt = document.createElement('option');
-    opt.value = name;
-    opt.textContent = name;
-    dom.driverSelect.appendChild(opt);
-  });
   dom.btnDriverNext.disabled = true;
+}
+
+
+/* ============================================================
+   DRIVER LOGIN
+   ============================================================ */
+async function validateDriverLogin(username, password) {
+  if (isDemoMode()) {
+    state.driver = username;
+    return true;
+  }
+  const { data, error } = await db
+    .from('drivers')
+    .select('id, name')
+    .eq('name', username)
+    .eq('password', password)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (error || !data) return false;
+  state.driver = data.name;
+  state.driverMap[data.name] = data.id;
+  return true;
 }
 
 
@@ -370,7 +387,10 @@ async function startTrip() {
       })
       .select()
       .single();
-    if (!tripErr) state.tripId = tripData.id;
+    if (!tripErr) {
+      state.tripId = tripData.id;
+      logEvent('trip_start');
+    }
   }
 
   // --- אתחול המפה (השהייה קצרה כדי שה-DOM יתרנדר לפני Leaflet) ---
@@ -552,9 +572,37 @@ async function sendLocation() {
 
 
 /* ============================================================
-   STATION ARRIVAL — שליחה ל-n8n להכרזה
+   EVENT LOG — כתיבה ישירה ל-Supabase
+   ============================================================ */
+async function logEvent(eventType, extra = {}) {
+  if (isDemoMode()) return;
+  try {
+    await db.from('events_log').insert({
+      trip_id:           state.tripId   || null,
+      driver_id:         state.driverMap?.[state.driver] || null,
+      route_id:          state.routeMap?.[state.route]   || null,
+      event_type:        eventType,
+      lat:               state.lastPosition?.lat || null,
+      lon:               state.lastPosition?.lon || null,
+      ...extra,
+    });
+  } catch (err) {
+    console.warn('[events_log]', err.message);
+  }
+}
+
+
+/* ============================================================
+   STATION ARRIVAL — כתיבה ל-events_log + שליחה ל-n8n
    ============================================================ */
 async function notifyStationArrival(stationIdx, station) {
+  // כתיבה ל-Supabase
+  await logEvent('station_arrival', {
+    station_name:      station.name,
+    announcement_text: station.name,
+  });
+
+  // שליחה ל-n8n (להכרזה בימות המשיח)
   if (!isWebhookConfigured()) return;
   try {
     await fetch(CONFIG.WEBHOOK_URL, {
@@ -766,6 +814,7 @@ function endTrip(reason = 'הנסיעה הסתיימה') {
 
   // סגירת נסיעה ב-Supabase
   if (state.tripId && !isDemoMode()) {
+    logEvent('trip_end');
     db.from('trips')
       .update({ status: 'completed', last_update: new Date().toISOString() })
       .eq('id', state.tripId)
@@ -949,13 +998,33 @@ const WakePersistence = {
 function bindEvents() {
   // DRIVER screen
   // בחירה מהרשימה הקיימת
-  dom.driverSelect.addEventListener('change', (e) => {
-    state.driver = e.target.value || null;
-    dom.btnDriverNext.disabled = !state.driver;
+  const checkDriverInputs = () => {
+    const u = dom.driverUsername.value.trim();
+    const p = dom.driverPassword.value;
+    dom.btnDriverNext.disabled = !(u && p);
+  };
+  dom.driverUsername.addEventListener('input', checkDriverInputs);
+  dom.driverPassword.addEventListener('input', checkDriverInputs);
+  dom.driverPassword.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !dom.btnDriverNext.disabled) dom.btnDriverNext.click();
   });
 
-  dom.btnDriverNext.addEventListener('click', () => {
-    if (!state.driver) return;
+  dom.btnDriverNext.addEventListener('click', async () => {
+    const username = dom.driverUsername.value.trim();
+    const password = dom.driverPassword.value;
+    dom.driverLoginError.textContent = '';
+    dom.btnDriverNext.disabled = true;
+    dom.btnDriverNext.textContent = 'מתחבר...';
+
+    const ok = await validateDriverLogin(username, password);
+
+    dom.btnDriverNext.disabled = false;
+    dom.btnDriverNext.textContent = 'כניסה ←';
+
+    if (!ok) {
+      dom.driverLoginError.textContent = 'שם משתמש או סיסמה שגויים';
+      return;
+    }
     dom.routeDriverLabel.textContent = `נהג: ${state.driver} — שלב 2 מתוך 3`;
     populateRouteSelect();
     showScreen('route');
@@ -1001,7 +1070,8 @@ function resetForNewTrip() {
   state.tripId               = null;
   state.finalStationReached  = false;
   state.autoEndTimerId       = null;
-  dom.driverSelect.value     = '';
+  dom.driverUsername.value   = '';
+  dom.driverPassword.value   = '';
   dom.routeSelect.value      = '';
   dom.btnDriverNext.disabled = true;
   dom.btnRouteNext.disabled  = true;

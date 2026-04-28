@@ -113,13 +113,16 @@ document.getElementById('btn-cancel-driver').addEventListener('click', () => {
 });
 
 document.getElementById('btn-save-driver').addEventListener('click', async () => {
-  const name = document.getElementById('new-driver-name').value.trim();
-  if (!name) { showToast('נא להזין שם'); return; }
-  const { error } = await db.from('drivers').insert({ name, is_active: true });
+  const name     = document.getElementById('new-driver-name').value.trim();
+  const password = document.getElementById('new-driver-password').value;
+  if (!name)     { showToast('נא להזין שם'); return; }
+  if (!password) { showToast('נא להזין סיסמה'); return; }
+  const { error } = await db.from('drivers').insert({ name, password, is_active: true });
   if (error) showToast('שגיאה בשמירה');
   else {
     showToast('נהג נוסף');
-    document.getElementById('new-driver-name').value = '';
+    document.getElementById('new-driver-name').value     = '';
+    document.getElementById('new-driver-password').value = '';
     document.getElementById('add-driver-form').classList.add('hidden');
     loadDrivers();
   }

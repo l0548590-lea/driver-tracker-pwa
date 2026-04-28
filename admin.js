@@ -142,7 +142,7 @@ async function loadRoutes() {
       <span>${r.route_name}</span>
       <button class="btn-danger" data-id="${r.id}" data-action="delete-route">מחק</button>
     `;
-    li.querySelector('span').addEventListener('click', () => selectRoute(r.id, r.route_name));
+    li.addEventListener('click', () => selectRoute(r.id, r.route_name));
     li.querySelector('[data-action="delete-route"]').addEventListener('click', async (e) => {
       e.stopPropagation();
       if (!confirm(`למחוק את מסלול "${r.route_name}"? כל התחנות יימחקו.`)) return;

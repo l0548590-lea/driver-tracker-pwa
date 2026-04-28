@@ -4,44 +4,29 @@
    CONFIGURATION — edit these values before deployment
    ============================================================ */
 const CONFIG = {
-  /**
-   * GET endpoint that returns driver names and routes.
-   * Expected response shape:
-   * {
-   *   "drivers": ["ישראל ישראלי", "אבי כהן"],
-   *   "routes": {
-   *     "מסלול צפון": [
-   *       { "name": "תחנה א", "lat": 32.0853, "lon": 34.7818 },
-   *       { "name": "תחנה ב", "lat": 32.1000, "lon": 34.8000 }
-   *     ]
-   *   }
-   * }
-   * NOTE: lat/lon are optional. If omitted, station auto-detection
-   *       is disabled and stations must be confirmed manually.
-   */
-  API_URL: 'https://YOUR_N8N_INSTANCE/webhook/get-data',
+  /** Supabase project URL */
+  SUPABASE_URL: 'https://djklzeiwasevjatfasnl.supabase.co',
+
+  /** Supabase publishable (anon) key */
+  SUPABASE_KEY: 'sb_publishable_NPMNAXMEzN_61lpHI0MyhQ_90Dz0D49',
 
   /**
-   * POST endpoint that receives location pings.
-   * The response may optionally contain { "terminate": true }
-   * to instruct the app to end the trip automatically.
+   * n8n webhook — נשלח רק כשנהג מגיע לתחנה (לצורך הכרזה בימות המשיח).
+   * לא נדרש לפינגים רגילים — אלה הולכים ישירות ל-Supabase.
    */
   WEBHOOK_URL: 'https://n8n.srv1249349.hstgr.cloud/webhook-test/1407e6ea-d0a6-424b-b739-db4b795df8a8',
 
-  /** Sent as the x-api-key header on every request */
+  /** Sent as the x-api-key header to n8n */
   API_KEY: 'YOUR_SECRET_API_KEY',
 
-  /** How often to POST location data to the webhook (ms) */
+  /** How often to update location in Supabase (ms) */
   SEND_INTERVAL: 30_000,
 
   /** Radius in meters within which a driver is considered "at" a station */
   STATION_RADIUS: 150,
 
-  /**
-   * Safety auto-shutdown: if no new station has been detected for this
-   * many milliseconds, the trip ends automatically.
-   */
-  SAFETY_TIMEOUT: 45 * 60 * 1000, // 45 minutes
+  /** Safety auto-shutdown after this many ms without a new station */
+  SAFETY_TIMEOUT: 45 * 60 * 1000,
 };
 
 
@@ -49,9 +34,12 @@ const CONFIG = {
    APPLICATION STATE
    ============================================================ */
 const state = {
-  // Data fetched from the API
+  // Data fetched from Supabase
   drivers: [],
   routes: {},
+  driverMap: {},   // name → uuid
+  routeMap:  {},   // name → uuid
+  tripId: null,    // uuid of the current active trip
 
   // Current trip selections
   driver: null,
@@ -142,6 +130,13 @@ const dom = {
 
 
 /* ============================================================
+   SUPABASE CLIENT
+   ============================================================ */
+const { createClient } = window.supabase;
+const db = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+
+
+/* ============================================================
    ENTRY POINT
    ============================================================ */
 document.addEventListener('DOMContentLoaded', () => {
@@ -207,53 +202,70 @@ const DEMO_DATA = {
 };
 
 function isDemoMode() {
-  return CONFIG.API_URL.includes('YOUR_N8N_INSTANCE');
+  return !CONFIG.SUPABASE_URL || CONFIG.SUPABASE_URL.includes('YOUR_SUPABASE');
 }
 
 function isWebhookConfigured() {
-  return !CONFIG.WEBHOOK_URL.includes('YOUR_N8N_INSTANCE');
+  return CONFIG.WEBHOOK_URL && !CONFIG.WEBHOOK_URL.includes('YOUR_N8N_INSTANCE');
 }
 
 async function loadData() {
   showScreen('loading');
 
-  /* מצב הדגמה — כשה-URL עדיין לא הוגדר */
   if (isDemoMode()) {
-    await new Promise((r) => setTimeout(r, 800)); // השהייה קצרה לאפקט טעינה
+    await new Promise((r) => setTimeout(r, 800));
     state.drivers = DEMO_DATA.drivers;
     state.routes  = DEMO_DATA.routes;
     populateDriverSelect();
     showScreen('driver');
-    showToast('מצב הדגמה — נתונים מדומים (ה-API לא הוגדר עדיין)', 4000);
+    showToast('מצב הדגמה — נתונים מדומים', 4000);
     return;
   }
 
   try {
-    const res = await fetch(CONFIG.API_URL, {
-      method: 'GET',
-      headers: { 'x-api-key': CONFIG.API_KEY },
+    // טעינת נהגים פעילים
+    const { data: driversData, error: driversErr } = await db
+      .from('drivers')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name');
+    if (driversErr) throw driversErr;
+
+    // טעינת מסלולים + תחנות
+    const { data: routesData, error: routesErr } = await db
+      .from('routes')
+      .select('id, route_name, stations(id, station_name, lat, lon, order_index, station_type)')
+      .order('route_name');
+    if (routesErr) throw routesErr;
+
+    state.driverMap = {};
+    state.drivers = driversData.map((d) => {
+      state.driverMap[d.name] = d.id;
+      return d.name;
     });
 
-    if (!res.ok) throw new Error(`שגיאת שרת: HTTP ${res.status}`);
-
-    const data = await res.json();
-
-    state.drivers = Array.isArray(data.drivers) ? data.drivers : [];
-    state.routes  = (data.routes && typeof data.routes === 'object') ? data.routes : {};
-
-    if (state.drivers.length === 0) {
-      throw new Error('לא נמצאו נהגים בתגובת ה-API');
+    state.routeMap = {};
+    state.routes   = {};
+    for (const route of routesData) {
+      state.routeMap[route.route_name] = route.id;
+      const sorted = (route.stations || []).sort((a, b) => a.order_index - b.order_index);
+      state.routes[route.route_name] = sorted.map((s) => ({
+        id:   s.id,
+        name: s.station_name,
+        lat:  s.lat,
+        lon:  s.lon,
+        סוג:  s.station_type || 'צומת',
+      }));
     }
+
+    if (state.drivers.length === 0) throw new Error('לא נמצאו נהגים בבסיס הנתונים');
 
     populateDriverSelect();
     showScreen('driver');
   } catch (err) {
     console.error('[loadData]', err);
     showToast(`שגיאה בטעינה: ${err.message}`);
-    setTimeout(() => {
-      showScreen('loading');
-      setTimeout(loadData, 1000);
-    }, 4000);
+    setTimeout(() => { showScreen('loading'); setTimeout(loadData, 1000); }, 4000);
   }
 }
 
@@ -339,6 +351,23 @@ async function startTrip() {
     : '--';
 
   showScreen('tracking');
+
+  // --- יצירת נסיעה ב-Supabase ---
+  if (!isDemoMode()) {
+    const { data: tripData, error: tripErr } = await db
+      .from('trips')
+      .insert({
+        driver_id:             state.driverMap?.[state.driver] || null,
+        route_id:              state.routeMap?.[state.route]   || null,
+        status:                'active',
+        current_station_index: -1,
+        start_time:            new Date().toISOString(),
+        last_update:           new Date().toISOString(),
+      })
+      .select()
+      .single();
+    if (!tripErr) state.tripId = tripData.id;
+  }
 
   // --- אתחול המפה (השהייה קצרה כדי שה-DOM יתרנדר לפני Leaflet) ---
   setTimeout(initMap, 50);
@@ -444,9 +473,10 @@ function detectCurrentStation(lat, lon) {
     const dist = haversineMeters(lat, lon, st.lat, st.lon);
     if (dist <= CONFIG.STATION_RADIUS) {
       state.currentStationIdx = i;
-      state.lastStationTime = Date.now(); // Reset safety timer
+      state.lastStationTime = Date.now();
 
       updateStationDisplay();
+      notifyStationArrival(i, st);
 
       console.log(`[Station] Reached: ${st.name || i} (${Math.round(dist)}m)`);
 
@@ -476,62 +506,58 @@ function updateStationDisplay() {
 
 
 /* ============================================================
-   SEND LOCATION WEBHOOK
+   SEND LOCATION — עדכון מיקום ב-Supabase
    ============================================================ */
 async function sendLocation() {
   if (!state.lastPosition || !state.tracking) return;
 
-  /* אם ה-webhook לא מוגדר — לא שולחים לשרת */
-  if (!isWebhookConfigured()) {
-    console.log('[DEMO] מיקום (לא נשלח לשרת):', state.lastPosition);
+  if (isDemoMode()) {
+    console.log('[DEMO] מיקום:', state.lastPosition);
     return;
   }
 
+  if (!state.tripId) return;
+
   const { lat, lon, timestamp } = state.lastPosition;
-  const currentStationObj = state.stations[state.currentStationIdx];
-  const stationName = currentStationObj
-    ? (typeof currentStationObj === 'string' ? currentStationObj : currentStationObj.name)
-    : null;
 
-  const payload = {
-    driver:       state.driver,
-    route:        state.route,
-    lat,
-    lon,
-    timestamp,
-    station:      stationName,
-    stationIndex: state.currentStationIdx,
-  };
+  const { error } = await db
+    .from('trips')
+    .update({
+      last_lat:              lat,
+      last_lon:              lon,
+      current_station_index: state.currentStationIdx,
+      last_update:           timestamp,
+    })
+    .eq('id', state.tripId);
 
+  if (error) console.warn('[Supabase] Update failed:', error.message);
+}
+
+
+/* ============================================================
+   STATION ARRIVAL — שליחה ל-n8n להכרזה
+   ============================================================ */
+async function notifyStationArrival(stationIdx, station) {
+  if (!isWebhookConfigured()) return;
   try {
-    const res = await fetch(CONFIG.WEBHOOK_URL, {
+    await fetch(CONFIG.WEBHOOK_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key':    CONFIG.API_KEY,
-      },
-      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'application/json', 'x-api-key': CONFIG.API_KEY },
+      body: JSON.stringify({
+        event:        'station_arrival',
+        driver:       state.driver,
+        route:        state.route,
+        trip_id:      state.tripId,
+        stationIndex: stationIdx,
+        stationName:  station.name,
+        stationType:  station.סוג || 'צומת',
+        lat:          state.lastPosition?.lat,
+        lon:          state.lastPosition?.lon,
+        timestamp:    new Date().toISOString(),
+      }),
     });
-
-    if (!res.ok) {
-      console.warn(`[Webhook] HTTP ${res.status}`);
-      return;
-    }
-
-    // Check if the backend wants to terminate the trip
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      let data;
-      try { data = await res.json(); } catch { return; }
-
-      if (data && (data.terminate === true || data.command === 'terminate')) {
-        const reason = data.reason || 'הנסיעה הסתיימה לפי הוראת השרת';
-        endTrip(reason);
-      }
-    }
   } catch (err) {
-    // Network errors are common on mobile — log and continue
-    console.warn('[Webhook] Send failed:', err.message);
+    console.warn('[Webhook] Station notify failed:', err.message);
   }
 }
 
@@ -716,6 +742,15 @@ function endTrip(reason = 'הנסיעה הסתיימה') {
     state.nextStationMarker = null;
     state.routeLine = null;
     state.stationMarkers = [];
+  }
+
+  // סגירת נסיעה ב-Supabase
+  if (state.tripId && !isDemoMode()) {
+    db.from('trips')
+      .update({ status: 'completed', last_update: new Date().toISOString() })
+      .eq('id', state.tripId)
+      .then(({ error }) => { if (error) console.warn('[Supabase] Trip close failed:', error.message); });
+    state.tripId = null;
   }
 
   dom.endReason.textContent = reason;
@@ -939,6 +974,7 @@ function resetForNewTrip() {
   state.currentStationIdx = -1;
   state.lastPosition     = null;
 
+  state.tripId               = null;
   dom.driverSelect.value     = '';
   dom.routeSelect.value      = '';
   dom.btnDriverNext.disabled = true;

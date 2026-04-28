@@ -568,3 +568,48 @@ html, body {
   .btn { font-size: 1.4rem; min-height: 4rem; }
   .card-value { font-size: 1.75rem; }
 }
+
+/* ============================================================
+   FINAL STATION PROMPT
+   ============================================================ */
+.final-prompt {
+  position: absolute;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(22, 163, 74, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 1.2rem 1.5rem;
+  text-align: center;
+  width: calc(100% - 2rem);
+  max-width: 360px;
+  z-index: 500;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+
+.final-prompt p {
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: .3rem;
+}
+
+.final-prompt-sub {
+  font-size: 1rem !important;
+  font-weight: 400 !important;
+  opacity: .9;
+  margin-bottom: 1rem !important;
+}
+
+.final-prompt-btns {
+  display: flex;
+  gap: .75rem;
+  justify-content: center;
+}
+
+.final-prompt-btns .btn {
+  min-height: 2.8rem;
+  font-size: 1rem;
+  padding: 0 1.2rem;
+}

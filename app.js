@@ -75,6 +75,10 @@ const state = {
 
   // Flag — prevents double-stop
   tracking: false,
+
+  // תחנה סופית
+  finalStationReached: false,
+  autoEndTimerId: null,
 };
 
 
@@ -480,13 +484,26 @@ function detectCurrentStation(lat, lon) {
 
       console.log(`[Station] Reached: ${st.name || i} (${Math.round(dist)}m)`);
 
-      // Auto-end on final station
-      if (i === stations.length - 1) {
-        setTimeout(() => endTrip('הגעת לתחנה הסופית — הנסיעה הסתיימה'), 2000);
+      // תחנה סופית — הצג שאלה, אל תסיים אוטומטית
+      if (i === stations.length - 1 && !state.finalStationReached) {
+        state.finalStationReached = true;
+        showFinalStationPrompt();
       }
       break;
     }
   }
+}
+
+function showFinalStationPrompt() {
+  document.getElementById('final-station-prompt').classList.remove('hidden');
+  // אחרי 30 דקות — סיום אוטומטי
+  state.autoEndTimerId = setTimeout(() => {
+    endTrip('סיום אוטומטי — 30 דקות לאחר הגעה לתחנה הסופית');
+  }, 30 * 60 * 1000);
+}
+
+function hideFinalStationPrompt() {
+  document.getElementById('final-station-prompt').classList.add('hidden');
 }
 
 function updateStationDisplay() {
@@ -727,9 +744,12 @@ function endTrip(reason = 'הנסיעה הסתיימה') {
   clearInterval(state.sendIntervalId);
   clearInterval(state.countdownId);
   clearInterval(state.safetyCheckId);
-  state.sendIntervalId = null;
-  state.countdownId    = null;
-  state.safetyCheckId  = null;
+  clearTimeout(state.autoEndTimerId);
+  state.sendIntervalId  = null;
+  state.countdownId     = null;
+  state.safetyCheckId   = null;
+  state.autoEndTimerId  = null;
+  hideFinalStationPrompt();
 
   // Release wake persistence
   WakePersistence.disable();
@@ -963,6 +983,10 @@ function bindEvents() {
   // TRACKING screen
   dom.btnEndTrip.addEventListener('click', () => endTrip('סיום נסיעה ידני על ידי הנהג'));
 
+  // תחנה סופית
+  document.getElementById('btn-confirm-end').addEventListener('click', () => endTrip('הגעת לתחנה הסופית — הנסיעה הסתיימה'));
+  document.getElementById('btn-continue-trip').addEventListener('click', () => hideFinalStationPrompt());
+
   // ENDED screen — reset for a new trip
   dom.btnRestart.addEventListener('click', resetForNewTrip);
 }
@@ -975,6 +999,8 @@ function resetForNewTrip() {
   state.lastPosition     = null;
 
   state.tripId               = null;
+  state.finalStationReached  = false;
+  state.autoEndTimerId       = null;
   dom.driverSelect.value     = '';
   dom.routeSelect.value      = '';
   dom.btnDriverNext.disabled = true;

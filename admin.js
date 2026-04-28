@@ -78,10 +78,30 @@ async function loadDrivers() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${d.name}</td>
+      <td>
+        <div style="display:flex;gap:.4rem;align-items:center">
+          <input type="text" class="pwd-input" value="${d.password || ''}" data-id="${d.id}"
+            style="width:110px;padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem">
+          <button class="btn-secondary" data-id="${d.id}" data-action="save-password"
+            style="padding:.3rem .6rem;font-size:.8rem">שמור</button>
+        </div>
+      </td>
       <td><input type="checkbox" class="toggle" ${d.is_active ? 'checked' : ''} data-id="${d.id}"></td>
       <td><button class="btn-danger" data-id="${d.id}" data-action="delete-driver">מחק</button></td>
     `;
     tbody.appendChild(tr);
+  });
+
+  // שמירת סיסמה
+  tbody.querySelectorAll('[data-action="save-password"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const input = tbody.querySelector(`.pwd-input[data-id="${btn.dataset.id}"]`);
+      const pwd   = input.value.trim();
+      if (!pwd) { showToast('נא להזין סיסמה'); return; }
+      const { error } = await db.from('drivers').update({ password: pwd }).eq('id', btn.dataset.id);
+      if (error) showToast('שגיאה בשמירה');
+      else showToast('סיסמה עודכנה');
+    });
   });
 
   // Toggle פעיל/לא פעיל

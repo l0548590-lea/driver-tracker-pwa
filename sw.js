@@ -14,12 +14,13 @@
    to make the app installable and available offline.
    ============================================================ */
 
-const CACHE_NAME    = 'driver-tracker-v4';
+const CACHE_NAME    = 'driver-tracker-v5';
 const SHELL_ASSETS  = [
   './',
   './index.html',
   './style.css',
   './app.js',
+  './config.js',
   './manifest.json',
   './icons/icon.svg',
 ];
@@ -73,19 +74,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for same-origin shell assets
+  // Network-first: always try the network so updates land immediately.
+  // Fall back to cache only when offline.
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-
-      // Not in cache — fetch from network and cache it
-      return fetch(event.request).then((networkResponse) => {
+    fetch(event.request)
+      .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const clone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return networkResponse;
-      });
-    })
+      })
+      .catch(() => caches.match(event.request))
   );
 });

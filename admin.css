@@ -332,6 +332,61 @@ body {
 .badge-active   { background: #dcfce7; color: #166534; }
 .badge-completed { background: #f3f4f6; color: #6b7280; }
 
+/* ===== LIVE MAP ===== */
+.live-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.live-status-label {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+#admin-live-map {
+  width: 100%;
+  height: 420px;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  border: 1px solid #e5e7eb;
+}
+
+.live-drivers-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.live-driver-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  min-width: 160px;
+  transition: box-shadow 0.15s;
+}
+
+.live-driver-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.live-time {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.no-active {
+  color: #6b7280;
+  padding: 1rem 0;
+}
+
 /* ===== TOAST ===== */
 .toast {
   position: fixed;

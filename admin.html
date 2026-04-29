@@ -31,6 +31,7 @@
     <nav class="tabs">
       <button class="tab active" data-tab="drivers">נהגים</button>
       <button class="tab" data-tab="routes">מסלולים ותחנות</button>
+      <button class="tab" data-tab="live">מעקב חי</button>
       <button class="tab" data-tab="history">היסטוריה</button>
     </nav>
 
@@ -87,6 +88,16 @@
         </div>
 
       </div>
+    </div>
+
+    <!-- ===== טאב מעקב חי ===== -->
+    <div id="tab-live" class="tab-content hidden">
+      <div class="live-header">
+        <h2>מעקב נהגים בזמן אמת</h2>
+        <span id="live-status" class="live-status-label">מתרענן כל 30 שנ'</span>
+      </div>
+      <div id="admin-live-map"></div>
+      <div id="live-drivers-list" class="live-drivers-list"></div>
     </div>
 
     <!-- ===== טאב היסטוריה ===== -->

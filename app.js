@@ -526,10 +526,18 @@ function hideFinalStationPrompt() {
   document.getElementById('final-station-prompt').classList.add('hidden');
 }
 
+function nextNonSkippedIdx(fromIdx) {
+  let i = fromIdx;
+  while (i < state.stations.length && state.skippedStations.has(i)) i++;
+  return i < state.stations.length ? i : -1;
+}
+
 function updateStationDisplay() {
   const { stations, currentStationIdx } = state;
   const current = stations[currentStationIdx];
-  const next    = stations[currentStationIdx + 1];
+
+  const nextIdx = nextNonSkippedIdx(currentStationIdx + 1);
+  const next    = nextIdx >= 0 ? stations[nextIdx] : null;
 
   const name = (st) =>
     st == null ? null : (typeof st === 'string' ? st : st.name);
@@ -537,7 +545,6 @@ function updateStationDisplay() {
   dom.currentStation.textContent = name(current) ?? 'ממתין...';
   dom.nextStation.textContent    = name(next) ?? '\u2705 תחנה סופית';
 
-  // עדכן סמן התחנה הבאה על המפה
   updateNextStationMarker();
 }
 
@@ -556,16 +563,25 @@ async function sendLocation() {
 
   const { lat, lon, timestamp } = state.lastPosition;
 
-  const { error } = await db.from('location_logs').insert({
-    driver_id: state.driverMap?.[state.driver] || null,
-    route_id:  state.routeMap?.[state.route]   || null,
-    lat,
-    lng:       lon,
-    timestamp,
-    status:    'active',
-  });
+  const driverId = state.driverMap?.[state.driver] || null;
+  const routeId  = state.routeMap?.[state.route]   || null;
 
-  if (error) console.warn('[Supabase] location_logs insert failed:', error.message);
+  const [{ error: logErr }, { error: tripErr }] = await Promise.all([
+    db.from('location_logs').insert({
+      driver_id: driverId,
+      route_id:  routeId,
+      lat,
+      lng:       lon,
+      timestamp,
+      status:    'active',
+    }),
+    state.tripId
+      ? db.from('trips').update({ last_update: timestamp }).eq('id', state.tripId)
+      : Promise.resolve({ error: null }),
+  ]);
+
+  if (logErr)  console.warn('[Supabase] location_logs insert failed:', logErr.message);
+  if (tripErr) console.warn('[Supabase] trips update failed:', tripErr.message);
 }
 
 
@@ -647,13 +663,13 @@ function drawStationsOnMap() {
     if (st.lat == null || st.lon == null) return;
     latlngs.push([st.lat, st.lon]);
 
-    // נקודה קטנה לכל תחנה
+    const isSkipped = state.skippedStations.has(i);
     const dot = L.circleMarker([st.lat, st.lon], {
-      radius: 7,
-      fillColor: '#2563eb',
-      color: '#fff',
-      weight: 2,
-      fillOpacity: 0.9,
+      radius:      isSkipped ? 5 : 7,
+      fillColor:   isSkipped ? '#6b7280' : '#2563eb',
+      color:       '#fff',
+      weight:      2,
+      fillOpacity: isSkipped ? 0.4 : 0.9,
     }).addTo(state.map);
 
     dot.bindTooltip(st.name || `תחנה ${i + 1}`, {
@@ -713,7 +729,8 @@ function updateMapDriver(lat, lon) {
 
 function updateNextStationMarker() {
   if (!state.map) return;
-  const next = state.stations[state.currentStationIdx + 1];
+  const nextIdx = nextNonSkippedIdx(state.currentStationIdx + 1);
+  const next = nextIdx >= 0 ? state.stations[nextIdx] : null;
 
   // הסר סמן קודם
   if (state.nextStationMarker) {

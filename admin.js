@@ -54,6 +54,7 @@ document.querySelectorAll('.tab').forEach((tab) => {
     tab.classList.add('active');
     document.getElementById(`tab-${tab.dataset.tab}`).classList.remove('hidden');
     if (tab.dataset.tab === 'history') loadHistory();
+    if (tab.dataset.tab === 'live')    initLiveMap();
   });
 });
 
@@ -343,6 +344,13 @@ document.getElementById('btn-save-station').addEventListener('click', async () =
    היסטוריה
    ============================================================ */
 async function loadHistory() {
+  // סגור נסיעות שלא עודכנו יותר מ-30 דקות
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  await db.from('trips')
+    .update({ status: 'completed' })
+    .eq('status', 'active')
+    .lt('last_update', cutoff);
+
   const { data, error } = await db
     .from('trips')
     .select('*, drivers(name), routes(route_name)')
@@ -369,6 +377,103 @@ async function loadHistory() {
     `;
     tbody.appendChild(tr);
   });
+}
+
+/* ============================================================
+   מעקב חי
+   ============================================================ */
+let liveMap         = null;
+let liveMarkers     = {};
+let liveRefreshId   = null;
+
+function initLiveMap() {
+  if (!liveMap) {
+    liveMap = L.map('admin-live-map').setView([31.5, 34.85], 8);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(liveMap);
+  } else {
+    liveMap.invalidateSize();
+  }
+
+  refreshLiveMap();
+  clearInterval(liveRefreshId);
+  liveRefreshId = setInterval(refreshLiveMap, 30_000);
+}
+
+async function refreshLiveMap() {
+  // נסיעות פעילות
+  const { data: trips, error } = await db
+    .from('trips')
+    .select('id, driver_id, route_id, drivers(name), routes(route_name)')
+    .eq('status', 'active');
+
+  if (error || !trips?.length) {
+    document.getElementById('live-drivers-list').innerHTML =
+      '<p class="no-active">אין נהגים פעילים כרגע</p>';
+    return;
+  }
+
+  const listEl = document.getElementById('live-drivers-list');
+  listEl.innerHTML = '';
+
+  for (const trip of trips) {
+    const { data: loc } = await db
+      .from('location_logs')
+      .select('lat, lng, created_at')
+      .eq('driver_id', trip.driver_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!loc) continue;
+
+    const driverName = trip.drivers?.name || '—';
+    const routeName  = trip.routes?.route_name || '—';
+    const updated    = new Date(loc.created_at).toLocaleTimeString('he-IL');
+
+    // עדכן / צור מרקר
+    if (liveMarkers[trip.driver_id]) {
+      liveMarkers[trip.driver_id].setLatLng([loc.lat, loc.lng]);
+      liveMarkers[trip.driver_id].setTooltipContent(`${driverName} | ${routeName}`);
+    } else {
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="
+          width:26px;height:26px;background:#2563eb;
+          border:3px solid #fff;border-radius:50%;
+          box-shadow:0 2px 8px rgba(0,0,0,0.4);
+          display:flex;align-items:center;justify-content:center;
+          color:#fff;font-size:11px;font-weight:bold;
+        ">${driverName.charAt(0)}</div>`,
+        iconSize: [26, 26], iconAnchor: [13, 13],
+      });
+      liveMarkers[trip.driver_id] = L.marker([loc.lat, loc.lng], { icon })
+        .addTo(liveMap)
+        .bindTooltip(`${driverName} | ${routeName}`, { permanent: true, direction: 'top', offset: [0, -10] });
+    }
+
+    // כרטיסיית נהג
+    const card = document.createElement('div');
+    card.className = 'live-driver-card';
+    card.innerHTML = `
+      <strong>${driverName}</strong>
+      <span>${routeName}</span>
+      <span class="live-time">עדכון: ${updated}</span>
+    `;
+    card.addEventListener('click', () => liveMap.setView([loc.lat, loc.lng], 15));
+    listEl.appendChild(card);
+  }
+
+  // הסר מרקרים של נהגים שסיימו
+  const activeIds = new Set(trips.map((t) => t.driver_id));
+  for (const id of Object.keys(liveMarkers)) {
+    if (!activeIds.has(id)) {
+      liveMap.removeLayer(liveMarkers[id]);
+      delete liveMarkers[id];
+    }
+  }
+
+  document.getElementById('live-status').textContent =
+    `עודכן: ${new Date().toLocaleTimeString('he-IL')}`;
 }
 
 /* ============================================================

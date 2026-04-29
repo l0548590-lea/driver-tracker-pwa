@@ -362,8 +362,9 @@ async function startTrip() {
   dom.trackDriverLabel.textContent = state.driver;
   dom.trackRouteLabel.textContent  = state.route;
 
-  // Show first "next station" immediately
-  const firstStation = state.stations[0];
+  // Show first non-skipped station immediately
+  const firstIdx     = nextNonSkippedIdx(0);
+  const firstStation = firstIdx >= 0 ? state.stations[firstIdx] : null;
   dom.currentStation.textContent = 'ממתין למיקום...';
   dom.nextStation.textContent    = firstStation
     ? (typeof firstStation === 'string' ? firstStation : firstStation.name)
